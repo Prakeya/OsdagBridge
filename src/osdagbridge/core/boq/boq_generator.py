@@ -7,6 +7,7 @@ import math
 from typing import Any
 
 from osdagbridge.core.utils.common import (
+    KEY_MP_ED_MASS,
     KEY_SPAN,
     KEY_TS_NO_OF_GIRDERS,
     KEY_TS_DECK_THICKNESS,
@@ -65,6 +66,12 @@ def calculate_material_quantities(inputs: dict, outputs: dict) -> dict:
         "bracing_diag_vol_total": "N.A.",
         "bracing_diag_wt_single": "N.A.",
         "bracing_diag_wt_total": "N.A.",
+
+        "steel_ed_vol_formula": r"\placeholder{Area $\times$ Length}",
+        "steel_ed_qty": "N.A.",
+        "steel_ed_vol_total": "N.A.",
+        "steel_ed_wt_single": "N.A.",
+        "steel_ed_wt_total": "N.A.",
         
         "concrete_deck_vol_formula": r"\placeholder{Width $\times$ Thickness $\times$ Length}",
         "concrete_deck_qty": "N.A.",
@@ -329,6 +336,33 @@ def calculate_material_quantities(inputs: dict, outputs: dict) -> dict:
                 quantities[f"{prefix}_vol_total"] = "N.A."
                 quantities[f"{prefix}_wt_single"] = "N.A."
                 quantities[f"{prefix}_wt_total"] = "N.A."
+
+        # 5d. End Diaphragm Members: section mass (kg/m) x girder spacing x member count
+        ed_masses = []
+        ed_prefix = f"{KEY_MP_ED_MASS}."
+        for key, val in inputs.items():
+            if key.startswith(ed_prefix):
+                try:
+                    m = float(val)
+                    if m > 0.0:
+                        ed_masses.append(m)
+                except (TypeError, ValueError):
+                    continue
+
+        if ed_masses and spacing > 0.0:
+            n_ed = len(ed_masses)
+            mass_per_m = ed_masses[0]  # representative member mass (kg/m)
+            ed_area = mass_per_m / 7850.0  # m^2 from mass density
+            ed_vol_single = ed_area * spacing
+            ed_wt_single = mass_per_m * spacing / 1000.0  # MT per member
+            ed_vol_total = ed_vol_single * n_ed
+            ed_wt_total = ed_wt_single * n_ed
+
+            quantities["steel_ed_vol_formula"] = f"${ed_area:.5f}\\text{{ m}}^2 \\times {spacing:.2f}\\text{{ m}} = {ed_vol_single:.5f}\\text{{ m}}^3$"
+            quantities["steel_ed_qty"] = str(n_ed)
+            quantities["steel_ed_vol_total"] = f"{ed_vol_total:.2f}"
+            quantities["steel_ed_wt_single"] = f"{ed_wt_single:.4f}"
+            quantities["steel_ed_wt_total"] = f"{ed_wt_total:.2f}"
 
         # 6. Crash Barrier (Cu.m) and Weight (MT)
         KEY_CB_AREA = "typical_section.crash_barrier.area"

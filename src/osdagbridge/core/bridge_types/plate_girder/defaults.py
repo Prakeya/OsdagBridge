@@ -261,7 +261,12 @@ def _update_loading_tab_defaults(input_dict: dict) -> None:
     """Fill Loading tab keys that are None with schema defaults."""
 
     def _update(key, value):
-        input_dict[key] = value
+        # Fill missing/None only: an explicit user value — including False
+        # for the vehicle checkboxes — must survive re-solves, otherwise a
+        # saved vehicle selection is silently reset to "all classes" on the
+        # next design run.
+        if input_dict.get(key) is None:
+            input_dict[key] = value
 
     # ── Permanent Load ─────────────────────────────────────────────────────
     _update(KEY_PL_SELF_WEIGHT_FACTOR,      "1.00")

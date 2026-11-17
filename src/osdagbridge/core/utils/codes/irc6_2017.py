@@ -887,20 +887,21 @@ class IRC6_2017:
     @staticmethod
     def cl_211_2_braking_force(design_lanes):
         """
-        Returns braking force as per IRC:6-2017 Clause 211.2.
-        Returns:
-            float: Braking force in t (rounded to 3 decimal places)
+        Returns braking force in tonnes as per IRC:6-2017 Clause 211.2.
+
+        20% of the Class A wheel load for the first two lanes, plus 5% of the
+        Class 70R wheel load for each additional lane beyond two.
+        Wheel loads from cl_204_1_* are in N; divided by ``t`` (9810 N = 1 t)
+        to return tonnes-force.
         """
-        for lane in range(1, design_lanes + 1):
-            if lane == 1 or lane == 2:
-                wheel_load = IRC6_2017.cl_204_1_ClassA_vehicle()['wheel_loads']
-                braking_force_1 = 0.20 * sum(wheel_load)  # t
-            if lane > 2:
-                wheel_load = IRC6_2017.cl_204_1_Class70R_vehicle_wheel()['wheel_loads']
-                braking_force_2 = 0.05 * sum(wheel_load)  # t
-            
-            total_braking_force = braking_force_1 + braking_force_2
-        return round(total_braking_force, 3)
+        if design_lanes < 1:
+            raise ValueError("Number of design lanes must be >= 1")
+        wheel_a = IRC6_2017.cl_204_1_ClassA_vehicle()['wheel_loads']
+        braking_force_t = 0.20 * sum(wheel_a) / t
+        if design_lanes > 2:
+            wheel_70r = IRC6_2017.cl_204_1_Class70R_vehicle_wheel()['wheel_loads']
+            braking_force_t += (design_lanes - 2) * 0.05 * sum(wheel_70r) / t
+        return round(braking_force_t, 3)
     
     @staticmethod
     def cl_211_3_braking_force_location():

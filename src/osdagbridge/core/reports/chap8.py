@@ -3,6 +3,7 @@ from typing import List
 from osdagbridge.core.utils.common import (
     KEY_DESIGN_MODE
 )
+from osdagbridge.core.reports import styles
 
 
 def ch8_design_log(log_entries: List[str], input_dict: dict) -> str:
@@ -23,13 +24,13 @@ def ch8_design_log(log_entries: List[str], input_dict: dict) -> str:
                 upper = line.upper()
                 if 'WARNING' in upper:
                     lines_tex.append(
-                        rf'\textcolor{{blue}}{{{escaped}}}\\')
+                        rf'\textcolor{{{styles.LOG_INFO_COLOR}}}{{{escaped}}}\\')
                 elif 'ERROR' in upper:
                     lines_tex.append(
-                        rf'\textcolor{{red}}{{{escaped}}}\\')
+                        rf'\textcolor{{{styles.LOG_ERROR_COLOR}}}{{{escaped}}}\\')
                 elif 'INFO' in upper:
                     lines_tex.append(
-                        rf'\textcolor{{osdagGreen}}{{{escaped}}}\\')
+                        rf'\textcolor{{{styles.LOG_SUCCESS_COLOR}}}{{{escaped}}}\\')
                 else:
                     continue  # skip lines without a known level — Osdag patter
 
@@ -56,7 +57,7 @@ form the basis of all design calculations in this software.
 \vspace{0.5cm}
 
 \begingroup
-\setlength{\tabcolsep}{3.5pt}
+""" + styles.tabcolsep(styles.TABCOLSEP_COMPACT) + r"""
 \begin{table}[H]
 \caption{\textbf{IRC Codes}}
 \begin{tabular}{|c|c|p{13cm}|}
@@ -79,7 +80,7 @@ IRC SP 114 & 2018 & Seismic Design of Road Bridges \\
 \end{table}
 
 \begingroup
-\setlength{\tabcolsep}{3.5pt}
+""" + styles.tabcolsep(styles.TABCOLSEP_COMPACT) + r"""
 \begin{table}[H]
 \caption{\textbf{IS Codes}}
 \begin{tabular}{|c|c|p{13cm}|}

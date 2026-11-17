@@ -119,6 +119,7 @@ from osdagbridge.core.utils.common import (
 )
 
 from osdagbridge.core.reports.report_utils import _tex
+from osdagbridge.core.reports import styles
 from .executive_summary import executive_summary
 from .chap1 import ch1_project_info
 from .chap2 import ch2_input_parameters
@@ -138,7 +139,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # LaTeX template sections for OsdagBridge Design Report
 # Matches the LaTeX template used in the OsdagBridge desktop application.
-# Color: osdagGreen = #91B014
+# Color: osdagGreen = #91B014  (defined in styles.COLOR_DEFS — single source)
 # =============================================================================
 
 
@@ -152,11 +153,11 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
     jn = _tex(job_number)
     rd = _tex(report_date)
     rv = _tex(report_version)
-    return r"""
-\documentclass[12pt,a4paper]{report}
-
-% Packages
-\usepackage[a4paper, margin=1in]{geometry}
+    # R6: geometry / fonts / colors / table spacing / header-footer theme /
+    # column types all come from styles.py (single source of truth).
+    return (
+        "\n" + styles.DOCUMENTCLASS + "\n\n% Packages\n"
+        + styles.GEOMETRY_PACKAGE + r"""
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{amssymb}
@@ -170,13 +171,7 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 \usepackage{setspace}
 \usepackage{enumitem}
 \usepackage{caption}
-
-\captionsetup{
-    labelfont=bf,
-    justification=raggedright,
-    singlelinecheck=false,
-    format=plain
-}
+""" + "\n" + styles.CAPTION_SETUP + r"""
 \usepackage{subcaption}
 \usepackage{multirow}
 \usepackage{colortbl}
@@ -192,89 +187,18 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 
 \numberwithin{table}{chapter}
 \numberwithin{figure}{chapter}
-% Table layout and spacing: consistent padding, row height, and longtable pre/post skips
-\setlength{\tabcolsep}{6pt}
-\renewcommand{\arraystretch}{1.12}
-\setlength{\LTpre}{0pt}
-\setlength{\LTpost}{6pt}
-% Table rules (outline thickness) and small extra row height for clarity
-\setlength{\arrayrulewidth}{0.5pt}
-\setlength{\extrarowheight}{0.6pt}
-
-% Prevent tables from overflowing past the page bottom:
-% if fewer than 5 baseline-skips remain, break to the next page first.
-\BeforeBeginEnvironment{table}{\needspace{5\baselineskip}}
-\BeforeBeginEnvironment{longtable}{\needspace{5\baselineskip}}
-
-\definecolor{osdagGreen}{HTML}{91B014}
-
-\fancypagestyle{main}{
-  \fancyhf{}
-  \fancyhead[L]{""" + pn + r""" $|$ """ + jn + r"""}
-  \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
-  \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
-  \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
-  \renewcommand{\footrule}{%
-    \ifbool{hasSDonPage}{%
-      \vspace{-20pt}%
-      \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
-      \vspace{4pt}%
-    }{%
-      \vspace{-8pt}%
-    }%
-    \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
-  }
-}
-\fancypagestyle{plain}{
-  \fancyhf{}
-  \fancyhead[L]{""" + pn + r""" $|$ """ + jn + r"""}
-  \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
-  \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
-  \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
-  \renewcommand{\footrule}{%
-    \ifbool{hasSDonPage}{%
-      \vspace{-20pt}%
-      \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
-      \vspace{4pt}%
-    }{%
-      \vspace{-8pt}%
-    }%
-    \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
-  }
-}
-\fancypagestyle{firstpage}{
-  \fancyhf{}
-  \renewcommand{\headrulewidth}{0pt}
-  \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
-  \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\footrule}{\vspace{-8pt}\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}}
-}
-\pagestyle{main}
-\setstretch{1.15}
-
-% Custom Commands
-\newcommand{\placeholder}[1]{\textit{\textless #1\textgreater}}
-\newcommand{\todo}[1]{\colorbox{yellow}{TODO: #1}}
-\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
-\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
-\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
-
-% Software-default asterisk
-\newcommand{\sdstar}{\textsuperscript{*}}
-\newbool{hasSDonPage}
-\boolfalse{hasSDonPage}
-\newcommand{\markSD}{\global\booltrue{hasSDonPage}}
-\renewcommand{\sdstar}{\textsuperscript{*}\markSD{}}
-\AddToHook{shipout/before}{\global\boolfalse{hasSDonPage}}
-
-\title{\Large\textbf{OsdagBridge} \\ \normalsize Open Source Software for Steel Girder Bridge Design \\ \vspace{2cm} \large Design Report}
+""" + styles.TABLE_SPACING + "\n\n" + styles.NEEDSPACE_GUARDS
+        + "\n\n" + styles.COLOR_DEFS + "\n\n"
+        + styles.page_styles(pn, jn, rd, rv)
+        + "\n" + styles.PAGESTYLE_MAIN + "\n\n"
+        + styles.CUSTOM_COMMANDS + styles.COLUMN_TYPES + "\n\n"
+        + styles.SDSTAR_COMMANDS + "\n\n" + r"""\title{\Large\textbf{OsdagBridge} \\ \normalsize Open Source Software for Steel Girder Bridge Design \\ \vspace{2cm} \large Design Report}
 \author{}
 \date{}
 
 \begin{document}
 """
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -593,8 +517,8 @@ class ReportDataBridge:
             if val is not None:
                 ur = float(val)
                 if ur <= 1.0:
-                    return r"\textcolor{black}{PASS}"
-                return r"\textcolor{red}{FAIL}"
+                    return styles.PASS_BLACK_TEX
+                return styles.FAIL_TEX
         except (TypeError, ValueError):
             pass
         return ""
@@ -862,6 +786,32 @@ def generate_report(payload, request):
         tex_path = os.path.join(request.output_dir, request.file_stem + '.tex')
 
         # Write to temp dir first, compile there, then copy back
+        # Data bridge + §5.5 utilization chart must exist before the figure
+        # bytes are written into tmp_dir/images (see loop below).
+        bridge = ReportDataBridge(payload.output_dict, payload.inputs, payload)
+        span_m = float(payload.inputs.get(KEY_SPAN, 0) or 0)
+
+        # Chapter 7 quantities — computed before the figure bytes are written
+        # below so the material charts can join figure_data in the same pass.
+        quantities = calculate_material_quantities(payload.inputs, payload.output_dict)
+        payload.inputs.update(quantities)
+        try:
+            from .report_utils import build_material_charts_pngs
+            for _name, _png in build_material_charts_pngs(quantities).items():
+                if _png:
+                    payload.figure_data[_name] = _png
+        except Exception as exc:
+            logger.warning("Chapter 7 material charts skipped: %s", exc)
+
+        try:
+            from .chap5 import ur_overall_summary
+            from .report_utils import build_ur_chart_png
+            _ur_png = build_ur_chart_png(ur_overall_summary(bridge))
+            if _ur_png:
+                payload.figure_data["ur_chart"] = _ur_png
+        except Exception as exc:
+            logger.warning("§5.5 utilization chart skipped: %s", exc)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
 
             # ── Write figure bytes into tmp_dir/images/ then free RAM immediately ──
@@ -895,13 +845,9 @@ def generate_report(payload, request):
                 shutil.copy2(org_logo_src, os.path.join(tmp_assets, 'org_logo.png'))
                 org_logo_latex = 'assets/org_logo.png'
 
-            # Compute and inject quantities for Chapter 7
-            quantities = calculate_material_quantities(payload.inputs, payload.output_dict)
-            payload.inputs.update(quantities)
-
             # ── Assemble LaTeX document (fig_paths now has tmp_dir paths) ──
-            bridge = ReportDataBridge(payload.output_dict, payload.inputs, payload)
-            span_m = float(payload.inputs.get(KEY_SPAN, 0) or 0)
+            # bridge / span_m / quantities were created above (needed for the
+            # UR chart and the Chapter 7 material charts).
 
             doc_parts = []
             doc_parts.append(preamble(payload.metadata.project_name, payload.metadata.job_number, payload.metadata.report_date, payload.metadata.subtitle or 'Rev 0'))
@@ -924,11 +870,11 @@ def generate_report(payload, request):
             if 'analysis' in secs:
                 doc_parts.append(ch4_analysis(payload.analysis_summary, fig_paths, bridge, span_m))
             if 'design_checks' in secs:
-                doc_parts.append(ch5_design_checks(payload.design_checks, bridge))
+                doc_parts.append(ch5_design_checks(payload.design_checks, bridge, fig_paths))
             if 'drawings' in secs and payload.options.include_figures:
                 doc_parts.append(ch6_drawings(fig_paths))
 
-            doc_parts.append(ch7_quantities(payload.inputs))
+            doc_parts.append(ch7_quantities(payload.inputs, fig_paths))
 
             mode = str(payload.inputs.get(KEY_DESIGN_MODE, "Optimized")).strip().lower()
             is_custom = mode in {"custom", "customized"}
