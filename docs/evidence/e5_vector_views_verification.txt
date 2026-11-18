@@ -1,0 +1,55 @@
+E5 — 2D elevation + isometric static vector figures (no media9/U3D)
+=====================================================================
+
+Requirements
+  [x] 2D longitudinal elevation figure
+  [x] Isometric static figure
+  [x] Side-by-side layout in Ch6 §6.1
+  [x] NO media9 / U3D / 3D annotations
+  [x] Vector format (styles.CHART_FORMAT = "pdf")
+
+TEX checks (Report_E5.tex)
+  media9 / U3D / Pr3D / 3D annot count : 0
+  PLACEHOLDER list vs Report_E4.tex   : IDENTICAL (CAD-only figs unchanged)
+  bridge_elevation.pdf include        : line ~2058
+  bridge_isometric.pdf include        : line ~2065
+  captions                            : Figure 6.1 Longitudinal Elevation (2D)
+                                        Figure 6.2 Isometric View
+
+PDF checks (harness Report_E5.pdf, 51 pages)
+  pdfimages -list raster count        : 2 (title-page logo + smask only)
+                                        → charts/views are VECTOR PDFs
+  /Subtype /3D, U3D, media9 in bytes  : absent
+  pdftotext page 43                   : Figure 6.1 + Figure 6.2 present,
+                                        side-by-side captions on one line,
+                                        axis label "Elevation (m)" present
+
+Compile baseline (manual 2-pass pdflatex on Report_E5.tex)
+  ERROR lines                         : 141  (= pre-existing baseline)
+    47 Misplaced \noalign
+    47 Misplaced \omit
+    47 Extra alignment tab
+  Overfull total                      : 164
+  Overfull in E5 minipage region
+    (tex lines 2045–2080)             : NONE  (no off-paper risk from pair)
+  Other >=45pt                        : all pre-existing (442 Ch4 fbox,
+                                        51.05/48.20 Ch2 girder tables,
+                                        50.9 IS-codes refs table)
+  Pages                               : 51  (E4 was 51; pair fits page 43)
+
+Builder unit check
+  geometry: span=20.0, n=3, spacing=1.7167, overhang=0.8583,
+            girder_depth=1.12, deck_t=0.25, bracing_x=[0, 6.67, 13.33, 20]
+  bridge_elevation : %PDF, 13655 bytes
+  bridge_isometric : %PDF,  7654 bytes
+
+Implementation
+  report_utils.py : _bridge_geometry, _draw_elevation, _draw_isometric,
+                    build_bridge_views (matplotlib Figure, no pyplot)
+  report_generator.py : fills figure_data keys bridge_elevation /
+                    bridge_isometric after ur_chart (only if absent)
+  chap6.py : _sec_cell width param (default 0.31 preserved for 3-col rows);
+                    elev_iso_row two minipages at 0.48\textwidth + \hfill
+
+Evidence PNG
+  docs/evidence/e5_after_side_by_side_pair.png  (page 43)

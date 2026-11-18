@@ -1,0 +1,60 @@
+E6 — ReportPayload validation + golden .tex tests
+==================================================
+
+Requirement
+  [x] Light ReportPayload validation (stdlib dataclass, NOT Pydantic)
+  [x] tests/unit/ pytest suite
+  [x] 3–5 golden .tex cases (compare .tex only, never PDFs)
+  [x] conda run -n osdagbridge-env pytest tests/unit -q
+
+Implementation
+  report_generator.py
+    ReportPayloadValidationError(ValueError)
+    REPORT_SECTION_KEYS (11 keys — matches UI report_options._REPORT_CHAPTERS
+      and tools/regen_report.py ALL_SECTIONS)
+    ReportPayload.validate() — collects ALL failures into one message:
+      metadata.project_name non-empty
+      options.sections non-empty list[str] with known keys
+      options.include_* are bool
+      inputs / analysis_summary / output_dict are dict
+      design_checks / log_entries are list
+      figures is ReportFigures
+      figure_data values are bytes|None
+    generate_report(): payload.validate() first; ReportPayloadValidationError
+      -> ReportResult(error=...) (no document assembled)
+  reports/__init__.py: exports ReportPayloadValidationError, REPORT_SECTION_KEYS
+
+Tests (tests/unit/)
+  test_report_payload_validation.py  (10 cases)
+    valid / empty project_name / empty sections / unknown section key /
+    non-string section / wrong input type / figure_data not bytes /
+    figure_data None OK / multi-error collection / section-key contract
+  test_report_golden_tex.py  (6 cases)
+    GOLDEN_DIR = tests/unit/golden/
+    1. preamble.tex          — preamble() fixed args
+    2. title_page.tex        — title_page() no logos (path-independent)
+    3. ch3_loads.tex         — ch3_loads() IRC Class A+70R fixture, span=20
+    4. ch6_bridge_views.tex  — ch6_drawings() with relative
+                               images/bridge_{elevation,isometric}.pdf
+    5. executive_summary.tex — executive_summary() minimal fixture
+    6. smoke validate() on golden-shaped payload
+    UPDATE_GOLDEN=1 regenerates goldens; normal run does byte-compare.
+
+Results
+  UPDATE_GOLDEN=1 pytest tests/unit/test_report_golden_tex.py
+      + test_report_payload_validation.py  -> 16 passed
+  pytest again (compare mode)                    -> 16 passed
+  conda run -n osdagbridge-env pytest tests/unit -q -> 19 passed
+  Bad payload via generate_report:
+      error = "Invalid ReportPayload:\n  - metadata.project_name: must be non-empty"
+      pdf_path = None (fail-fast, no latex)
+  Harness rebuild --label E6:
+      Report_E6.pdf produced, PLACEHOLDER list identical to E5,
+      page 43 still shows Figure 6.1/6.2 pair, no media9/U3D
+
+Golden files (committed)
+  tests/unit/golden/preamble.tex
+  tests/unit/golden/title_page.tex
+  tests/unit/golden/ch3_loads.tex
+  tests/unit/golden/ch6_bridge_views.tex
+  tests/unit/golden/executive_summary.tex

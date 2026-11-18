@@ -1447,13 +1447,17 @@ class CustomWindow(QWidget):
                         os.path.exists(result.tex_path)
                         else 'Not generated'
                     )
+                    # E7: prefer the pre-flight / compile message when present
+                    cause = getattr(result, 'error', None) or (
+                        "PDF could not be generated.\n\n"
+                        "Possible causes:\n"
+                        "• pdflatex not installed\n"
+                        "• LaTeX compilation errors"
+                    )
                     CustomMessageBox(
                         title="Report Generation Failed",
                         text=(
-                            "PDF could not be generated.\n\n"
-                            "Possible causes:\n"
-                            "• pdflatex not installed\n"
-                            "• LaTeX compilation errors\n\n"
+                            f"{cause}\n\n"
                             f"TeX source:\n{tex_info}"
                         ),
                         dialogType=MessageBoxType.Critical,

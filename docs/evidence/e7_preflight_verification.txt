@@ -1,0 +1,24 @@
+=== E7 pre-flight diagnostic verification ===
+
+1) Happy path: bundled pdflatex + 24 preamble packages -> preflight passes
+2) Missing binary -> LatexPreflightError with Fix: install TeX Live / osdag_latex_env
+3) Missing package -> LatexPreflightError with Fix: tlmgr install <pkg>
+4) Full regen with preflight in path: Report_E4.pdf rebuilt OK
+
+Sample error (missing binary):
+LaTeX pre-flight failed — the report was not compiled:
+1. pdflatex was not found (tried: /nonexistent/pdflatex).
+  Fix: install a TeX distribution (TeX Live or MiKTeX), or
+  install the osdag_latex_env package so the bundled
+  compiler is available, then restart the application.
+
+Sample error (missing package):
+LaTeX pre-flight failed — the report was not compiled:
+1. Missing LaTeX package(s): definitely_missing_pkg_xyz.sty
+  Fix: install them with your TeX distribution, e.g.
+    tlmgr install definitely_missing_pkg_xyz
+  (TeX Live) or via the MiKTeX package manager.
+
+Notes: no bundler fallback (never auto-installs); packages parsed
+from preamble() so the list cannot drift; ReportResult.error carries
+the message to the UI failure dialog.

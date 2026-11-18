@@ -20,15 +20,94 @@ FONT_SIZE_PT = 12
 BODY_STRETCH = "1.15"          # \setstretch value (fonts)
 PAGESTYLE_MAIN = "\\pagestyle{main}\n\\setstretch{" + BODY_STRETCH + "}"
 
+# ── Figures (E3) ─────────────────────────────────────────────────────────────
+# matplotlib savefig format for the report charts (UR chart, material charts).
+# "pdf" = vector output — crisp at any zoom, text stays selectable; "png" =
+# raster fallback (renderer dpi applies).  The writer in report_generator
+# appends this extension when copying figure bytes to tmp images/.
+CHART_FORMAT = "pdf"
+
 # ── Colors ───────────────────────────────────────────────────────────────────
 OSDAG_GREEN_HEX = "91B014"     # brand green (head/foot rules, success log)
 OSDAG_GREEN = "osdagGreen"     # LaTeX color name
 COLOR_DEFS = "\\definecolor{" + OSDAG_GREEN + "}{HTML}{" + OSDAG_GREEN_HEX + "}"
 
-# Semantic status text — single source for PASS/FAIL rendering (feeds E1).
+# Semantic status text — single source for PASS/FAIL rendering.
 PASS_TEX = "PASS"
 FAIL_TEX = r"\textcolor{red}{FAIL}"
 PASS_BLACK_TEX = r"\textcolor{black}{PASS}"  # used where PASS must contrast on dark rows
+
+# ── Pass/Fail cell badges (E1) ──────────────────────────────────────────────
+# colortbl \cellcolor fills for table Status/UR cells. Threshold is identical
+# to the UR chart in report_utils.build_ur_chart: UR <= 1.0 -> green (safe),
+# UR > 1.0 -> red (unsafe). Fills are light so black text stays readable.
+COLOR_SAFE = "statusSafe"       # green cell fill (PASS)
+COLOR_UNSAFE = "statusUnsafe"   # red cell fill (FAIL)
+COLOR_SAFE_HEX = "C6EFCE"
+COLOR_UNSAFE_HEX = "FFC7CE"
+COLOR_BADGE_DEFS = (
+    "\\definecolor{" + COLOR_SAFE + "}{HTML}{" + COLOR_SAFE_HEX + "}\n"
+    "\\definecolor{" + COLOR_UNSAFE + "}{HTML}{" + COLOR_UNSAFE_HEX + "}"
+)
+
+
+def status_cell(ok, text=None):
+    """Green PASS / red FAIL \\cellcolor badge for table status cells (E1)."""
+    if ok:
+        return "\\cellcolor{" + COLOR_SAFE + "}" + ("PASS" if text is None else text)
+    return "\\cellcolor{" + COLOR_UNSAFE + "}" + ("FAIL" if text is None else text)
+
+
+def ur_cell(ur, fmt="{:.2f}"):
+    """UR value in a green/red cell — same <= 1.0 rule as the UR chart (E1)."""
+    f = float(ur)
+    return status_cell(f <= 1.0, fmt.format(f))
+
+
+# ── Verified clause references (E2) ──────────────────────────────────────────
+# HARD RULE: every entry must be traceable from the calculation code. Sources:
+#   - girder checks: engine checks[].clause via designer._add_check
+#     (designer.py:2140-2419) and plategirderbridge.py
+#   - shear connectors: designer.py Cl.606.x checks + plategirderbridge.py:1064
+#   - deck slab: deckdesign.py (docstrings / log strings with clause numbers)
+#   - cross bracing / end diaphragm members: osdag_core Compression_bolted /
+#     Tension_bolted run through connect.run_calculation (MODULE_CLASS_MAP)
+# Never add a clause that the calculation code does not emit. Keys with no
+# traceable clause are simply absent — clause_ref() returns "---" for them.
+CLAUSE_REFS = {
+    # Girder ULS/SLS checks — engine check_id clauses (IRC 22 / IRC 24 / IS 800)
+    "moment":       "IRC 22:2015 Cl.603.3.1; IS 800:2007 Cl.8.2.1",
+    "shear":        "IRC 22:2015 Cl.603.3.3.2; IS 800:2007 Cl.8.4",
+    "interaction":  "IRC 22:2015 Cl.603.3.3.3",
+    "ltb":          "IRC 22:2015 Cl.603.3.3.1; IS 800:2007 Cl.8.2.2",
+    "int_stiff":    "IRC 24:2010 Cl.509.7.2; IS 800:2007 Cl.8.7.2",
+    "brg_stiff":    "IRC 24:2010 Cl.509.7.3; IS 800:2007 Cl.8.7.3",
+    "deflection":   "IRC 22:2015 Cl.604.3.2",
+    "stress":       "IRC 22:2015 Cl.604.3.1; IRC 112 Cl.12.2.1",
+    "fatigue":      "IRC 22:2015 Cl.605",
+    # Shear connectors — engine Cl.606.x (designer.py:1324/1376/2245-2284)
+    "sc_capacity":  "IRC 22:2015 Cl.606.3.1, 606.3.2",
+    "sc_sl1":       "IRC 22:2015 Cl.606.4.1",
+    "sc_sl2":       "IRC 22:2015 Cl.606.4.1.1",
+    "sc_sr":        "IRC 22:2015 Cl.606.4.2",
+    "sc_max":       "IRC 22:2015 Cl.606.9",
+    "sc_ts":        "IRC 22:2015 Cl.606.10",
+    "sc_detail":    "IRC 22:2015 Cl.606.6",
+    # Cross bracing / end diaphragm members — osdag_core member design
+    "cb_compression": "IS 800:2007 Cl.7.1.2",
+    "cb_tension":     "IS 800:2007 Cl.6.1, 6.2",
+    # Deck slab — deckdesign.py (only clauses the code actually cites)
+    "deck_punching":  "IRC 112:2020 Cl.10.4",
+    "deck_oneway":    "IRC 112:2020 Eq.10.1, Cl.10.3.2",
+    "deck_crack":     "IRC 112:2020 Cl.12.3.2, 12.3.4; IRC 22:2015 Cl.604.4",
+    # Section classification — is800_2007.py:21/40/58 (Table 2, Cl.3.7)
+    "classification": "IS 800:2007 Table 2, Cl.3.7",
+}
+
+
+def clause_ref(key):
+    """Verified clause string for a CLAUSE_REFS key; '---' when not traceable."""
+    return CLAUSE_REFS.get(key, "---")
 
 
 def red_tex(text):

@@ -188,7 +188,7 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 \numberwithin{table}{chapter}
 \numberwithin{figure}{chapter}
 """ + styles.TABLE_SPACING + "\n\n" + styles.NEEDSPACE_GUARDS
-        + "\n\n" + styles.COLOR_DEFS + "\n\n"
+        + "\n\n" + styles.COLOR_DEFS + "\n" + styles.COLOR_BADGE_DEFS + "\n\n"
         + styles.page_styles(pn, jn, rd, rv)
         + "\n" + styles.PAGESTYLE_MAIN + "\n\n"
         + styles.CUSTOM_COMMANDS + styles.COLUMN_TYPES + "\n\n"
@@ -366,11 +366,95 @@ class ReportPayload:
     output_dict:      dict = field(default_factory=dict)
     figure_data:      dict = field(default_factory=dict)  # {attr: bytes} — cleared after writing to tmpdir
 
+    def validate(self) -> None:
+        """Light structural validation (stdlib dataclass — not Pydantic).
+
+        Raises ReportPayloadValidationError listing every failed check.
+        Callers that need fail-fast behaviour (generate_report) invoke this
+        before any document body is assembled.
+        """
+        errors: List[str] = []
+
+        if not isinstance(self.metadata, ReportMetadata):
+            errors.append(
+                f"metadata: expected ReportMetadata, got {type(self.metadata).__name__}")
+        elif not str(self.metadata.project_name or "").strip():
+            errors.append("metadata.project_name: must be non-empty")
+
+        if not isinstance(self.options, ReportOptions):
+            errors.append(
+                f"options: expected ReportOptions, got {type(self.options).__name__}")
+        else:
+            secs = self.options.sections
+            if not isinstance(secs, list) or not secs:
+                errors.append("options.sections: must be a non-empty list")
+            else:
+                bad = [s for s in secs if not isinstance(s, str)]
+                if bad:
+                    errors.append(
+                        f"options.sections: non-string entries {bad!r}")
+                unknown = sorted(set(secs) - REPORT_SECTION_KEYS)
+                if unknown:
+                    errors.append(
+                        f"options.sections: unknown keys {unknown!r} "
+                        f"(allowed: {sorted(REPORT_SECTION_KEYS)})")
+            for flag in ("include_figures", "include_toc", "include_pdf"):
+                if not isinstance(getattr(self.options, flag, None), bool):
+                    errors.append(f"options.{flag}: expected bool")
+
+        if not isinstance(self.inputs, dict):
+            errors.append(
+                f"inputs: expected dict, got {type(self.inputs).__name__}")
+        if not isinstance(self.analysis_summary, dict):
+            errors.append(
+                "analysis_summary: expected dict, got "
+                f"{type(self.analysis_summary).__name__}")
+        if not isinstance(self.design_checks, list):
+            errors.append(
+                f"design_checks: expected list, got {type(self.design_checks).__name__}")
+        if not isinstance(self.figures, ReportFigures):
+            errors.append(
+                f"figures: expected ReportFigures, got {type(self.figures).__name__}")
+        if not isinstance(self.log_entries, list):
+            errors.append(
+                f"log_entries: expected list, got {type(self.log_entries).__name__}")
+        if not isinstance(self.output_dict, dict):
+            errors.append(
+                f"output_dict: expected dict, got {type(self.output_dict).__name__}")
+
+        if not isinstance(self.figure_data, dict):
+            errors.append(
+                f"figure_data: expected dict, got {type(self.figure_data).__name__}")
+        else:
+            for key, val in self.figure_data.items():
+                if val is not None and not isinstance(val, (bytes, bytearray)):
+                    errors.append(
+                        f"figure_data[{key!r}]: expected bytes|None, got "
+                        f"{type(val).__name__}")
+
+        if errors:
+            raise ReportPayloadValidationError(
+                "Invalid ReportPayload:\n  - " + "\n  - ".join(errors))
+
 
 @dataclass
 class ReportResult:
     pdf_path: Optional[str]
     tex_path: Optional[str]
+    # E7: actionable failure reason (pre-flight / compile). None on success.
+    error: Optional[str] = None
+
+
+class ReportPayloadValidationError(ValueError):
+    """Raised when a ReportPayload fails light structural validation."""
+
+
+# Section keys accepted by ReportOptions.sections (UI / harness contract).
+REPORT_SECTION_KEYS = frozenset({
+    "exec_summary", "project_info", "input_parameters", "loads",
+    "analysis", "design_checks", "drawings", "quantities",
+    "standards", "design_log_window", "references",
+})
 
 
 class ReportDataBridge:
@@ -511,14 +595,12 @@ class ReportDataBridge:
         return ""
 
     def get_cb_status(self, pair: str, member: str, force_type: str) -> str:
-        """PASS / FAIL based on UR <= 1.0."""
+        """PASS / FAIL cell badge based on UR <= 1.0 (E1)."""
         try:
             val = self._cb_osdag(pair, member, force_type).get("efficiency")
             if val is not None:
                 ur = float(val)
-                if ur <= 1.0:
-                    return styles.PASS_BLACK_TEX
-                return styles.FAIL_TEX
+                return styles.status_cell(ur <= 1.0)
         except (TypeError, ValueError):
             pass
         return ""
@@ -757,11 +839,111 @@ _FIGURE_MAP = [
     ('defl_ll',               'defl_ll.png'),
 ]
 
+class LatexPreflightError(RuntimeError):
+    """pdflatex is missing or a required .sty package is not installed.
+
+    E7: raised before any document body is built so the user gets one
+    clean, actionable message instead of nonstopmode log noise. Never
+    installs or bundles TeX packages itself (no bundler fallback).
+    """
+
+
+def _required_sty_packages():
+    """Package basenames loaded by preamble() — parsed from preamble() so
+    this list cannot drift when packages are added or removed."""
+    import re
+    text = preamble("p", "j", "d", "r")
+    names = []
+    for grp in re.findall(r"\\usepackage(?:\[[^\]]*\])?\{([^}]+)\}", text):
+        names.extend(n.strip() for n in grp.split(",") if n.strip())
+    seen = set()
+    out = []
+    for n in names:
+        if n not in seen:
+            seen.add(n)
+            out.append(n)
+    return out
+
+
+def preflight_latex(compiler):
+    """Verify the LaTeX toolchain before generating the document.
+
+    Checks (1) the pdflatex binary is executable and (2) every package
+    declared in preamble() resolves via kpsewhich. Raises
+    LatexPreflightError with a multi-line, actionable message on failure.
+    Returns None when the toolchain is ready.
+    """
+    problems = []
+
+    # ── 1. pdflatex binary ──────────────────────────────────────────
+    if os.path.dirname(compiler):
+        bin_ok = os.path.isfile(compiler) and os.access(compiler, os.X_OK)
+        tried = compiler
+    else:
+        from shutil import which
+        found = which(compiler)
+        bin_ok = found is not None
+        tried = compiler
+    if not bin_ok:
+        problems.append(
+            "pdflatex was not found (tried: %s).\n"
+            "  Fix: install a TeX distribution (TeX Live or MiKTeX), or\n"
+            "  install the osdag_latex_env package so the bundled\n"
+            "  compiler is available, then restart the application." % tried
+        )
+    else:
+        # ── 2. required .sty packages via kpsewhich ──────────────────
+        # Prefer kpsewhich next to the compiler (bundled TeX Live layout);
+        # fall back to PATH. If kpsewhich itself is unavailable, skip the
+        # package scan rather than false-positive on every package.
+        bin_dir = os.path.dirname(os.path.abspath(compiler))
+        kpse = os.path.join(bin_dir, "kpsewhich")
+        if os.name == "nt" and not kpse.lower().endswith(".exe"):
+            kpse += ".exe"
+        if not (os.path.isfile(kpse) and os.access(kpse, os.X_OK)):
+            from shutil import which as _which
+            kpse = _which("kpsewhich")
+        if kpse:
+            missing = []
+            for name in _required_sty_packages():
+                sty = name + ".sty"
+                try:
+                    r = subprocess.run(
+                        [kpse, sty],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                    )
+                    found = bool(r.returncode == 0 and r.stdout.strip())
+                except OSError:
+                    found = False
+                if not found:
+                    missing.append(sty)
+            if missing:
+                tlmgr = " ".join(m.split(".")[0] for m in missing)
+                problems.append(
+                    "Missing LaTeX package(s): %s\n"
+                    "  Fix: install them with your TeX distribution, e.g.\n"
+                    "    tlmgr install %s\n"
+                    "  (TeX Live) or via the MiKTeX package manager."
+                    % (", ".join(missing), tlmgr)
+                )
+
+    if problems:
+        lines = ["LaTeX pre-flight failed — the report was not compiled:"]
+        for i, p in enumerate(problems, 1):
+            lines.append("%d. %s" % (i, p))
+        raise LatexPreflightError("\n".join(lines))
+
+
 def generate_report(payload, request):
     # type: (ReportPayload, ReportRequest) -> ReportResult
     """Compile the full OsdagBridge Design Report to PDF (+ .tex source)."""
     tex_path = None
     try:
+        # E6: fail fast on structurally invalid payloads (before preflight).
+        payload.validate()
+
         # Use OsdagLatexEnv to discover the bundled pdflatex path
         compiler = 'pdflatex'
         try:
@@ -775,8 +957,12 @@ def generate_report(payload, request):
                     os.environ['PATH'] = str(latex_env.bin_dir) + os.pathsep + os.environ.get('PATH', '')
         except Exception as e:
             logger.info("osdag_latex_env not found or failed to load. (%s)", e)
-            
+
         logger.info("Compiler: %s", compiler)
+
+        # E7: fail fast with an actionable message before any document
+        # body is assembled (no bundler fallback — never auto-install).
+        preflight_latex(compiler)
 
         os.makedirs(request.output_dir, exist_ok=True)
 
@@ -796,21 +982,32 @@ def generate_report(payload, request):
         quantities = calculate_material_quantities(payload.inputs, payload.output_dict)
         payload.inputs.update(quantities)
         try:
-            from .report_utils import build_material_charts_pngs
-            for _name, _png in build_material_charts_pngs(quantities).items():
-                if _png:
-                    payload.figure_data[_name] = _png
+            from .report_utils import build_material_charts
+            for _name, _fig_bytes in build_material_charts(quantities).items():
+                if _fig_bytes:
+                    payload.figure_data[_name] = _fig_bytes
         except Exception as exc:
             logger.warning("Chapter 7 material charts skipped: %s", exc)
 
         try:
             from .chap5 import ur_overall_summary
-            from .report_utils import build_ur_chart_png
-            _ur_png = build_ur_chart_png(ur_overall_summary(bridge))
-            if _ur_png:
-                payload.figure_data["ur_chart"] = _ur_png
+            from .report_utils import build_ur_chart
+            _ur_fig = build_ur_chart(ur_overall_summary(bridge))
+            if _ur_fig:
+                payload.figure_data["ur_chart"] = _ur_fig
         except Exception as exc:
             logger.warning("§5.5 utilization chart skipped: %s", exc)
+
+        # E5: static vector elevation + isometric (skipped if CAD already
+        # provided a figure under the same key).
+        try:
+            from .report_utils import build_bridge_views
+            for _name, _b in build_bridge_views(
+                    payload.inputs, payload.output_dict).items():
+                if _b and _name not in payload.figure_data:
+                    payload.figure_data[_name] = _b
+        except Exception as exc:
+            logger.warning("Bridge elevation/isometric views skipped: %s", exc)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
 
@@ -820,7 +1017,7 @@ def generate_report(payload, request):
             fig_paths = {}
             for attr, img_bytes in list(payload.figure_data.items()):
                 if img_bytes:
-                    p = os.path.join(tmp_images, attr + '.png')
+                    p = os.path.join(tmp_images, attr + '.' + styles.CHART_FORMAT)
                     with open(p, 'wb') as fh:
                         fh.write(img_bytes)
                     fig_paths[attr] = p.replace('\\', '/')
@@ -932,10 +1129,24 @@ def generate_report(payload, request):
         if 'res' in locals():
             logger.error("pdflatex STDOUT:\n%s", res.stdout.decode('utf-8', 'ignore'))
             logger.error("pdflatex STDERR:\n%s", res.stderr.decode('utf-8', 'ignore'))
-        return ReportResult(pdf_path=None, tex_path=tex_path)
+        return ReportResult(
+            pdf_path=None, tex_path=tex_path,
+            error="pdflatex ran but no PDF was produced. See the log for "
+                  "the compiler output.",
+        )
+
+    except LatexPreflightError as exc:
+        # E7: one clean, actionable message — already logged as-is.
+        logger.error("%s", exc)
+        return ReportResult(pdf_path=None, tex_path=None, error=str(exc))
+
+    except ReportPayloadValidationError as exc:
+        # E6: structural payload problems — no document was assembled.
+        logger.error("%s", exc)
+        return ReportResult(pdf_path=None, tex_path=None, error=str(exc))
 
     except Exception as exc:
         logger.error("generate_report failed: %s", exc, exc_info=True)
         if tex_path and os.path.exists(tex_path):
-            return ReportResult(pdf_path=None, tex_path=tex_path)
-        return ReportResult(pdf_path=None, tex_path=None)
+            return ReportResult(pdf_path=None, tex_path=tex_path, error=str(exc))
+        return ReportResult(pdf_path=None, tex_path=None, error=str(exc))

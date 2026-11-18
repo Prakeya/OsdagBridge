@@ -1,7 +1,8 @@
 # Technical Changes — Report Generator Enhancements
 
 Branch: `feature/report-generator-enhancements` (vs. `d74f56d fix: Z,Sa/g,Ah,Av in Report`)
-Scope: `12 files changed, +814 / −203` (all Python; LaTeX emitted at runtime).
+Scope: R1–R6 (commit `9b054d0`) + extras E1–E7 (uncommitted until handover).
+LaTeX emitted at runtime; all changes are Python + tests + docs.
 
 ## 1. How to reproduce / verify
 
@@ -36,8 +37,16 @@ Notes:
 | R6 | Single source of truth for styles (`styles.py`) | Done, verified | regen output byte-identical to baseline; 0 style literals outside `styles.py` |
 | — | Table 2.7 units (values were metres, labelled mm) | Done, verified | `evidence/fix_before_units_1_12mm.png`, `evidence/fix_after_units_1120mm.png` |
 | — | Executive summary must report computed outcomes (not hardcoded "pass") | Done, verified | `evidence/fix_before_exec_hardcoded_pass.png`, `evidence/fix_after_exec_computed.png` |
+| E1 | PASS/FAIL cellcolor badges in Ch.5 status columns | Done, verified | `evidence/e1_*.png` |
+| E2 | Reference / clause column in Ch.5 check tables | Done, verified | `evidence/e2_*.png` |
+| E3 | Vector PDF charts (no raster PNGs) | Done, verified | `evidence/e3_vector_charts_pdfimages.txt` |
+| E4 | Governing load-combination column on demand/UR rows | Done, verified | `evidence/e4_after_tbl5_{3,4,5,6}_governing_lc.png`, `e4_governing_lc_verification.txt` |
+| E7 | Pre-flight LaTeX diagnostic (fail fast, actionable) | Done, verified | `evidence/e7_preflight_verification.txt` |
+| E5 | 2D elevation + isometric static vector figures side-by-side; no media9/U3D | Done, verified | `evidence/e5_after_side_by_side_pair.png`, `e5_vector_views_verification.txt` |
+| E6 | Light `ReportPayload` validation + `tests/unit/` golden `.tex` | Done, verified | `evidence/e6_payload_validation_golden_tex.txt`, `tests/unit/golden/*.tex` |
 
-All 17 evidence PNGs are 100-dpi renders of the delivered PDFs, in `docs/evidence/`.
+Evidence PNGs are 100-dpi renders of the delivered PDFs, in `docs/evidence/`.
+E1–E7 implementation details: section 7 below.
 
 ## 3. Per-requirement implementation
 
@@ -144,21 +153,147 @@ GUI baseline; grep confirms zero style literals outside `styles.py`.
 
 ## 6. Known limitations / not addressed
 
-- **Ch.6 `[PLACEHOLDER: …]` figures**: the headless run has no CAD session, so
-  generated-section/cross-section figures are placeholders. Regenerating from
-  the GUI (which exports figures into `payload.figure_data`) fills them.
+- **Ch.6 `[PLACEHOLDER: …]` figures** (13 CAD-only views): the headless run has
+  no CAD session. E5 added always-on static vector elevation + isometric
+  (Figures 6.1–6.2); the remaining 13 placeholders fill when the GUI exports
+  figures into `payload.figure_data`. PLACEHOLDER list is byte-identical
+  E4→E5→E6.
 - **Footer page count off-by-one**: footers show `Page n of N` where `N` is one
   less than the physical page count (pre-existing on the baseline, unchanged).
+- **141 manual-compile pdflatex errors** (baseline, unchanged through E1–E7):
+  47× `Misplaced \noalign` + 47× `Misplaced \omit` + 47× `Extra alignment tab`.
+  The bundled compiler used by `generate_report` still produces a valid PDF.
 - **Table numbering shifts** in Ch.3 (consequence of the required split); no
   cross-references exist, so nothing broke.
 - Historical mangled row in old Table 5.1 renders (`r1_before_tbl5_1_mangled.png`)
   is preserved deliberately as the defect evidence.
 
-## 7. Deliverables
+## 7. Extras E1–E7 (user checklist)
+
+Order of completion: **E1 → E2 → E3 → E4 → E7 → E5 → E6** (E7 pulled ahead of
+E5; all seven verified before this doc update).
+
+| # | Requirement | Status | Evidence |
+|---|-------------|--------|----------|
+| E1 | PASS/FAIL cellcolor badges in Ch.5 status columns | Done, verified | `evidence/e1_*.png` |
+| E2 | Reference / clause column in Ch.5 check tables | Done, verified | `evidence/e2_*.png` |
+| E3 | Vector PDF charts (no raster PNGs) | Done, verified | `evidence/e3_vector_charts_pdfimages.txt` |
+| E4 | Governing load-combination column on demand/UR rows | Done, verified | `evidence/e4_after_tbl5_{3,4,5,6}_governing_lc.png`, `e4_governing_lc_verification.txt` |
+| E7 | Pre-flight LaTeX diagnostic (fail fast, actionable) | Done, verified | `evidence/e7_preflight_verification.txt` |
+| E5 | 2D elevation + isometric static vector figures side-by-side; no media9/U3D | Done, verified | `evidence/e5_after_side_by_side_pair.png`, `e5_vector_views_verification.txt` |
+| E6 | Light `ReportPayload` validation + `tests/unit/` golden `.tex` | Done, verified | `evidence/e6_payload_validation_golden_tex.txt`, `tests/unit/golden/*.tex` |
+
+### E1 — PASS/FAIL badges
+`styles.py`: `COLOR_SAFE`/`COLOR_UNSAFE`/`COLOR_BADGE_DEFS`/`status_cell`/`ur_cell`.
+`chap5.py::_badge_status()` colours `PASS` green, `FAIL` red; `WARN`/`N/A`
+pass through uncoloured. Neutral statuses intentionally uncoloured.
+
+### E2 — Reference column
+`styles.py`: `CLAUSE_REFS` dict + `clause_ref()` helper. ~20 Ch.5 tables gained
+a `Reference` column (spec widths, `tabcolsep` tightened, per-cell `footnotesize`).
+Deck flexure kept `---` (clause not traceable to a single engine check id).
+Clause strings verified against the engine-emitted text for each check id.
+
+### E3 — vector charts
+`styles.CHART_FORMAT = "pdf"`; `_fig_bytes()` helper; renamed
+`build_ur_chart`/`build_material_charts` (drop the old `_png` suffix).
+Writer uses `attr + '.' + styles.CHART_FORMAT`. `pdfimages -list` on the
+delivered PDF shows only the title-page logo raster — charts are vector XObjects.
+
+### E4 — Governing LC column
+`chap5.py`: helper `_gov_lc(check_ids, girder=None, label_contains=None)`
+(~line 250) resolves the governing combination from
+`design_results.per_lc` / per-girder check entries (keys are `id`, not
+`check_id`). Demand/UR rows of Tables 5.3–5.6 carry a 7th column
+`Governing LC (ULS)`; capacity/property rows show `---`.
+Governing LCs observed: flexure `{1}` / shear `{2}` / interaction `{3,4}` →
+`ACCIDENTAL_1: 1.0DL + 1.0DW + 0.75LL`; LTB `{5}` + label contains
+"Construction" → `1.0 DL` (check id 5 is shared by two LTB variants — label
+filter required). `_gov_lc_in_522` delegates to `_gov_lc` so Table 5.29 rows
+stay byte-identical (regression check).
+Four longtable specs widened to 7 columns; max new overfull on those tables
+42.36 pt (< 47.8 pt off-paper limit).
+
+### E7 — pre-flight diagnostic
+`report_generator.py`: `LatexPreflightError`, `_required_sty_packages()`
+(regex-parses `preamble()`, 24 packages, cannot drift), `preflight_latex(compiler)`
+checks binary (`isfile`+`X_OK` or `which`) then `kpsewhich` (sibling of
+compiler, then PATH; if `kpsewhich` absent the package scan is skipped rather
+than false-positive). Called in `generate_report` right after
+`logger.info("Compiler: …")`, before `os.makedirs`. On failure returns
+`ReportResult(pdf_path=None, tex_path=None, error=…)` with a multi-line
+actionable message ("Fix: install TeX Live/MiKTeX…" / "tlmgr install …").
+UI failure dialog (`template_page.py`) prefers `result.error` over the generic
+causes text. No bundler fallback — never auto-installs.
+
+### E5 — elevation + isometric (static vector)
+`report_utils.py`: `_bridge_geometry()` (span, girder count/spacing/overhang,
+girder depth from `steeldesign.details.total_depth` (mm→m) or section input,
+deck thickness mm→m, transverse bracing stations ~every 10 m),
+`_draw_elevation()` (2D side view: deck slab, girder silhouette, bracing
+markers, support triangles, span/height dimensions),
+`_draw_isometric()` (3D wireframe: deck outline, girder chords, bracing
+frames, supports; `view_init(elev=22, azim=-58)`),
+`build_bridge_views()` → `{"bridge_elevation": PDF bytes,
+"bridge_isometric": PDF bytes}` via `matplotlib.figure.Figure` (no pyplot,
+backend-independent, same pattern as `build_ur_chart`).
+`report_generator.generate_report` fills these keys only if absent (CAD may
+supply its own). `chap6.py::_sec_cell` gained a `width` parameter (default
+`0.31\textwidth` preserved for the 3-column CB/ED rows); `elev_iso_row` places
+the pair at `0.48\textwidth` + `\hfill` as Figures 6.1–6.2 in §6.1.
+Verified: 0 `media9`/`U3D`/`/3D` in both `.tex` and `.pdf` bytes;
+`pdfimages -list` shows only the title-page logo (charts/views are vector);
+page 43 renders the pair side-by-side; no overfull in the minipage region.
+
+### E6 — payload validation + golden TEX
+`ReportPayloadValidationError(ValueError)` + `REPORT_SECTION_KEYS` (11 keys —
+matches UI `report_options._REPORT_CHAPTERS` and harness `ALL_SECTIONS`).
+`ReportPayload.validate()` (stdlib dataclass, **not** Pydantic) collects every
+failed check into one message: non-empty `project_name`; non-empty
+`options.sections` of known string keys; `include_*` are bool; `inputs` /
+`analysis_summary` / `output_dict` are dict; `design_checks` / `log_entries`
+are list; `figures` is `ReportFigures`; `figure_data` values are `bytes|None`.
+`generate_report` calls `payload.validate()` first; a validation failure
+returns `ReportResult(error=…)` without assembling any document.
+`tests/unit/test_report_payload_validation.py` (10 cases) +
+`tests/unit/test_report_golden_tex.py` (6 cases; 5 golden `.tex` files under
+`tests/unit/golden/`: `preamble`, `title_page`, `ch3_loads`,
+`ch6_bridge_views`, `executive_summary`). Goldens compare `.tex` only, never
+PDFs; regenerate with `UPDATE_GOLDEN=1 python -m pytest
+tests/unit/test_report_golden_tex.py`.
+
+```bash
+conda run -n osdagbridge-env pytest tests/unit -q
+# 19 passed
+```
+
+## 8. Pre-existing defects (documented, not fixed)
+
+| Defect | Notes |
+|--------|-------|
+| Footer off-by-one | `Page N-1 of M-1` on every page; present on the baseline |
+| 141 pdflatex errors on manual compile | 47× each of `Misplaced \noalign`, `Misplaced \omit`, `Extra alignment tab`; bundled compiler still emits a valid PDF |
+| 442 pt overfull | Ch.4 `fbox` figure box |
+| 51.05 / 48.20 pt overfull ×3 each | Ch.2 girder property tables |
+| 50.94 pt overfull | Ch.10 IS-codes table |
+| 13 Ch.6 PLACEHOLDER figures | CAD-only views; fill from the GUI |
+| "Note: 3. Limit" artefact | Cosmetic string in Ch.3 |
+
+## 9. Deferred future work
+
+- Pydantic migration of the report payload/options dataclasses
+- Branding: logo/stamp placement beyond the current title-page logos
+- i18n of report strings
+- CI wiring for `pytest tests/unit`
+- Zip-export fallback for the compiled report
+- Interactive 3D PDF (would require media9/U3D — explicitly out of scope for E5)
+
+## 10. Deliverables
 
 - `Report_Before.pdf` (43 pp) — untouched baseline (GUI run).
-- `Report_After.pdf` (45 pp) — final build; all cumulative checks pass:
-  50/50 table headers, 3 chart PNGs embedded, 8 vehicle rows, BOQ 2(d) row,
-  `1120 mm`, computed executive outcomes, no `\mathit`-raw/`一` artefacts.
-- `docs/evidence/*.png` — 17 before/after renders cited above.
+- `Report_After.pdf` (45 pp) — R1–R6 final build.
+- `Report_E1.pdf` … `Report_E6.pdf` — per-extras incremental builds
+  (E6 is the cumulative deliverable: 51 pp).
+- `docs/evidence/*` — before/after renders + verification `.txt` for R1–R6 and E1–E7.
+- `tests/unit/` — payload validation + golden `.tex` suite (E6).
 - This document: `docs/technical_changes.md`.

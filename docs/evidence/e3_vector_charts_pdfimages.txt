@@ -1,0 +1,22 @@
+== E2 (PNG charts) — pdfimages -list ==
+page   num  type   width height color comp bpc  enc interp  object ID x-ppi y-ppi size ratio
+--------------------------------------------------------------------------------------------
+   1     0 image     768   258  rgb     3   8  image  no       119  0   204   204 49.1K 8.5%
+   1     1 smask     768   258  gray    1   8  image  no       119  0   204   204  214B 0.1%
+  41     2 image    1050   735  rgb     3   8  image  no       463  0   197   197 29.3K 1.3%
+  41     3 smask    1050   735  gray    1   8  image  no       463  0   197   197  771B 0.1%
+  45     4 image    1050   735  rgb     3   8  image  no       496  0   209   209 23.0K 1.0%
+  45     5 smask    1050   735  gray    1   8  image  no       496  0   209   209  771B 0.1%
+  45     6 image    1050   480  rgb     3   8  image  no       503  0   209   209 21.4K 1.4%
+  45     7 smask    1050   480  gray    1   8  image  no       503  0   209   209  511B 0.1%
+
+== E3 (vector PDF charts) — pdfimages -list ==
+page   num  type   width height color comp bpc  enc interp  object ID x-ppi y-ppi size ratio
+--------------------------------------------------------------------------------------------
+   1     0 image     768   258  rgb     3   8  image  no       119  0   204   204 49.1K 8.5%
+   1     1 smask     768   258  gray    1   8  image  no       119  0   204   204  214B 0.1%
+
+== E3 TEX chart refs ==
+images/ur_chart.pdf
+images/steel_chart.pdf
+images/deck_chart.pdf

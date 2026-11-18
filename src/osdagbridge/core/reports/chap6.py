@@ -51,7 +51,7 @@ def ch6_drawings(fig_paths):
     gside  = _sec_fig(fig_paths.get('stiffener_preview'),  'Side View of Girder',              'fig:girder-side')
     cbdia  = _sec_fig(fig_paths.get('cb_diagram'),         'Cross Bracing Layout',             'fig:cb-layout')
 
-    def _sec_cell(path, title, label=None):
+    def _sec_cell(path, title, label=None, width=r'0.31\textwidth'):
         """One minipage cell: image above, numbered below (for side-by-side row)."""
         label_tex = (r'\label{' + label + '}') if label else ''
         if path:
@@ -59,12 +59,28 @@ def ch6_drawings(fig_paths):
             body = r'\includegraphics[width=\linewidth]{' + p + '}'
         else:
             body = r'\fbox{\parbox{0.95\linewidth}{\centering\textit{[ ' + title + r' ]}}}'
-        return (r'\begin{minipage}[t]{0.31\textwidth}' + '\n'
+        return (r'\begin{minipage}[t]{' + width + '}' + '\n'
                 r'\centering' + '\n'
                 + body + '\n'
                 r'\captionof{figure}{' + title + '}\n'
                 + label_tex + '\n'
                 r'\end{minipage}')
+
+    # E5: static vector 2D elevation + isometric, side-by-side (no media9/U3D).
+    # Built by report_utils.build_bridge_views; keys are always populated
+    # unless the builder itself failed (then each cell falls back to a box).
+    elev_iso_row = (
+        r'\noindent' + '\n'
+        + _sec_cell(fig_paths.get('bridge_elevation'),
+                    'Bridge --- Longitudinal Elevation (2D)',
+                    'fig:bridge-elevation',
+                    width=r'0.48\textwidth') + '\n'
+        + r'\hfill' + '\n'
+        + _sec_cell(fig_paths.get('bridge_isometric'),
+                    'Bridge --- Isometric View',
+                    'fig:bridge-iso',
+                    width=r'0.48\textwidth')
+    )
 
     # Cross Bracing section views (Figures 6.8, 6.9, 6.10) — 3 columns
     cb_bracing = _sec_cell(
@@ -132,6 +148,7 @@ This section presents CAD-generated views of the designed bridge and its compone
 \label{sec:bridge-layout}
 
 """
+            + elev_iso_row + '\n\n'
             + sup3d + '\n\n'
             + cs + '\n\n'
             + gtop + r"""
